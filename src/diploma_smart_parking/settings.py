@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/5.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
-
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -25,8 +25,13 @@ SECRET_KEY = 'django-insecure-75069mn@r9hah80ve38t7!vmi+7)93!1ylyv^uau0dv0-73++#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = ['http://localhost:3001', 'localhost', 'localhost:8000', '127.0.0.1']
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3001",       # Next.js dev
+    "http://127.0.0.1:3001",
+    "https://diploma-smart-parking.yourbandy.com",  # ваш продакшен-фронтенд
+]
+CORS_ALLOW_CREDENTIALS = True
 
 # Application definition
 
@@ -39,9 +44,36 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'sensor',
+    'users',
+    'drf_yasg',
 ]
 
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+}
+
+SWAGGER_SETTINGS = {
+    # Описание того, как передавать JWT:
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header',
+            'description': 'JWT Authorization header: "Bearer <token>"',
+        }
+    },
+    # По-умолчанию не накладываем security на все эндпоинты
+    'USE_SESSION_AUTH': False,
+    'DEFAULT_SECURITY': [],
+}
+
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -77,8 +109,12 @@ WSGI_APPLICATION = 'diploma_smart_parking.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get('POSTGRES_DB', 'diploma_smart_parking'),
+        'USER': os.environ.get('POSTGRES_USER', 'postgres'),
+        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'postgrespw'),
+        'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
+        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
     }
 }
 

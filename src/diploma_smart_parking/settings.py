@@ -28,14 +28,22 @@ DEBUG = True
 ALLOWED_HOSTS = ['http://localhost:3001', 'localhost', 'localhost:8000', '127.0.0.1']
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3001",       # Next.js dev
+    "http://localhost:3000",       # Next.js dev
     "http://127.0.0.1:3001",
+    "http://127.0.0.1:3000",
     "https://diploma-smart-parking.yourbandy.com",  # ваш продакшен-фронтенд
 ]
 CORS_ALLOW_CREDENTIALS = True
 
+from corsheaders.defaults import default_headers
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'authorization',
+]
+
 # Application definition
 
 INSTALLED_APPS = [
+    'corsheaders',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',

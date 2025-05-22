@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-75069mn@r9hah80ve38t7!vmi+7)93!1ylyv^uau0dv0-73++#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['http://localhost:3001', 'localhost', 'localhost:8000', '127.0.0.1']
+ALLOWED_HOSTS = ['http://localhost:3001', 'localhost', 'localhost:8000', '127.0.0.1', 'https://api-diploma-smart-parking.yourbandy.com', 'api-diploma-smart-parking.yourbandy.com']
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3001",       # Next.js dev
     "http://localhost:3000",       # Next.js dev

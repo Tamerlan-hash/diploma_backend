@@ -1,7 +1,7 @@
 # =====================
 # 1. Стадия сборки
 # =====================
-FROM mwalbeck/python-poetry:1.2-3.11 AS builder
+FROM mwalbeck/python-poetry:2.1-3.11 AS builder
 
 WORKDIR /app
 

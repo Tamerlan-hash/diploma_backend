@@ -13,6 +13,13 @@ djangorestframework = "^3.15.2"
 gunicorn = "^23.0.0"
 psycopg2-binary = "^2.9.10"
 django-cors-headers = "^4.7.0"
+djangorestframework-simplejwt = "^5.3.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest-django = "^4.8.0"
+pytest-cov = "^4.1.0"
+pytest = "^8.3.5"
+typing-extensions = "^4.8.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

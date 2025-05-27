@@ -16,6 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 from rest_framework import permissions
 
 from drf_yasg.views import get_schema_view
@@ -35,6 +37,9 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/sensor/', include('sensor.urls')),
     path('api/auth/', include('users.urls')),
+    path('api/parking/', include('parking.urls')),
+    path('api/payments/', include('payments.urls')),
+    path('api/subscriptions/', include('subscriptions.urls')),
     # Схема без UI (JSON/YAML)
     path('swagger<str:format>', schema_view.without_ui(cache_timeout=0), name='schema-json'),
     # Swagger UI
@@ -42,3 +47,7 @@ urlpatterns = [
     # Redoc UI
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
 ]
+
+# Serve media files in development
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

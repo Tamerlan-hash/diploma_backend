@@ -1,8 +1,8 @@
 from django.contrib import admin
-from .models import Sensor
+from .models import ParkingSpot, Sensor, Blocker
 
-@admin.register(Sensor)
-class SensorAdmin(admin.ModelAdmin):
+@admin.register(ParkingSpot)
+class ParkingSpotAdmin(admin.ModelAdmin):
     list_display = (
         'reference',
         'name',
@@ -14,6 +14,24 @@ class SensorAdmin(admin.ModelAdmin):
         'longitude2',
         'longitude3',
         'longitude4',
-        'is_lock',
+        'price_per_hour',
+        'created_at',
+    )
+
+@admin.register(Sensor)
+class SensorAdmin(admin.ModelAdmin):
+    list_display = (
+        'reference',
+        'parking_spot',
+        'is_occupied',
+        'created_at',
+    )
+
+@admin.register(Blocker)
+class BlockerAdmin(admin.ModelAdmin):
+    list_display = (
+        'reference',
+        'parking_spot',
+        'is_raised',
         'created_at',
     )

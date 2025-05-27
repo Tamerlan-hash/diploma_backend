@@ -1,0 +1,203 @@
+[
+  {
+    "model": "subscriptions.subscriptionplan",
+    "pk": 1,
+    "fields": {
+      "name": "Базовый план",
+      "description": "Базовый план подписки на 30 дней с 10% скидкой на парковку",
+      "duration_days": 30,
+      "price": 1500.00,
+      "discount_percentage": 10.00,
+      "is_active": true,
+      "created_at": "2023-05-26T12:00:00Z",
+      "updated_at": "2023-05-26T12:00:00Z"
+    }
+  },
+  {
+    "model": "subscriptions.subscriptionplan",
+    "pk": 2,
+    "fields": {
+      "name": "Стандартный план",
+      "description": "Стандартный план подписки на 90 дней с 15% скидкой на парковку",
+      "duration_days": 90,
+      "price": 4000.00,
+      "discount_percentage": 15.00,
+      "is_active": true,
+      "created_at": "2023-05-26T12:00:00Z",
+      "updated_at": "2023-05-26T12:00:00Z"
+    }
+  },
+  {
+    "model": "subscriptions.subscriptionplan",
+    "pk": 3,
+    "fields": {
+      "name": "Премиум план",
+      "description": "Премиум план подписки на 365 дней с 20% скидкой на парковку",
+      "duration_days": 365,
+      "price": 12000.00,
+      "discount_percentage": 20.00,
+      "is_active": true,
+      "created_at": "2023-05-26T12:00:00Z",
+      "updated_at": "2023-05-26T12:00:00Z"
+    }
+  },
+  {
+    "model": "subscriptions.tariffzone",
+    "pk": 1,
+    "fields": {
+      "name": "Центр города",
+      "description": "Центральная часть города с высоким спросом на парковку",
+      "is_active": true,
+      "created_at": "2023-05-26T12:00:00Z",
+      "updated_at": "2023-05-26T12:00:00Z"
+    }
+  },
+  {
+    "model": "subscriptions.tariffzone",
+    "pk": 2,
+    "fields": {
+      "name": "Спальный район",
+      "description": "Жилые районы города с умеренным спросом на парковку",
+      "is_active": true,
+      "created_at": "2023-05-26T12:00:00Z",
+      "updated_at": "2023-05-26T12:00:00Z"
+    }
+  },
+  {
+    "model": "subscriptions.tariffzone",
+    "pk": 3,
+    "fields": {
+      "name": "Торговый центр",
+      "description": "Зона вокруг крупных торговых центров",
+      "is_active": true,
+      "created_at": "2023-05-26T12:00:00Z",
+      "updated_at": "2023-05-26T12:00:00Z"
+    }
+  },
+  {
+    "model": "subscriptions.tariffrule",
+    "pk": 1,
+    "fields": {
+      "name": "Центр - Будни - Весь день",
+      "zone": 1,
+      "parking_spot": null,
+      "time_period": "all_day",
+      "custom_start_time": null,
+      "custom_end_time": null,
+      "day_type": "weekday",
+      "custom_days": "",
+      "price_per_hour": 300.00,
+      "valid_from": "2023-05-26T12:00:00Z",
+      "valid_to": null,
+      "is_active": true,
+      "priority": 10,
+      "created_at": "2023-05-26T12:00:00Z",
+      "updated_at": "2023-05-26T12:00:00Z"
+    }
+  },
+  {
+    "model": "subscriptions.tariffrule",
+    "pk": 2,
+    "fields": {
+      "name": "Центр - Выходные - Весь день",
+      "zone": 1,
+      "parking_spot": null,
+      "time_period": "all_day",
+      "custom_start_time": null,
+      "custom_end_time": null,
+      "day_type": "weekend",
+      "custom_days": "",
+      "price_per_hour": 200.00,
+      "valid_from": "2023-05-26T12:00:00Z",
+      "valid_to": null,
+      "is_active": true,
+      "priority": 10,
+      "created_at": "2023-05-26T12:00:00Z",
+      "updated_at": "2023-05-26T12:00:00Z"
+    }
+  },
+  {
+    "model": "subscriptions.tariffrule",
+    "pk": 3,
+    "fields": {
+      "name": "Спальный район - Будни - Весь день",
+      "zone": 2,
+      "parking_spot": null,
+      "time_period": "all_day",
+      "custom_start_time": null,
+      "custom_end_time": null,
+      "day_type": "weekday",
+      "custom_days": "",
+      "price_per_hour": 150.00,
+      "valid_from": "2023-05-26T12:00:00Z",
+      "valid_to": null,
+      "is_active": true,
+      "priority": 10,
+      "created_at": "2023-05-26T12:00:00Z",
+      "updated_at": "2023-05-26T12:00:00Z"
+    }
+  },
+  {
+    "model": "subscriptions.tariffrule",
+    "pk": 4,
+    "fields": {
+      "name": "Спальный район - Выходные - Весь день",
+      "zone": 2,
+      "parking_spot": null,
+      "time_period": "all_day",
+      "custom_start_time": null,
+      "custom_end_time": null,
+      "day_type": "weekend",
+      "custom_days": "",
+      "price_per_hour": 100.00,
+      "valid_from": "2023-05-26T12:00:00Z",
+      "valid_to": null,
+      "is_active": true,
+      "priority": 10,
+      "created_at": "2023-05-26T12:00:00Z",
+      "updated_at": "2023-05-26T12:00:00Z"
+    }
+  },
+  {
+    "model": "subscriptions.tariffrule",
+    "pk": 5,
+    "fields": {
+      "name": "Торговый центр - Будни - Весь день",
+      "zone": 3,
+      "parking_spot": null,
+      "time_period": "all_day",
+      "custom_start_time": null,
+      "custom_end_time": null,
+      "day_type": "weekday",
+      "custom_days": "",
+      "price_per_hour": 200.00,
+      "valid_from": "2023-05-26T12:00:00Z",
+      "valid_to": null,
+      "is_active": true,
+      "priority": 10,
+      "created_at": "2023-05-26T12:00:00Z",
+      "updated_at": "2023-05-26T12:00:00Z"
+    }
+  },
+  {
+    "model": "subscriptions.tariffrule",
+    "pk": 6,
+    "fields": {
+      "name": "Торговый центр - Выходные - Весь день",
+      "zone": 3,
+      "parking_spot": null,
+      "time_period": "all_day",
+      "custom_start_time": null,
+      "custom_end_time": null,
+      "day_type": "weekend",
+      "custom_days": "",
+      "price_per_hour": 250.00,
+      "valid_from": "2023-05-26T12:00:00Z",
+      "valid_to": null,
+      "is_active": true,
+      "priority": 10,
+      "created_at": "2023-05-26T12:00:00Z",
+      "updated_at": "2023-05-26T12:00:00Z"
+    }
+  }
+]

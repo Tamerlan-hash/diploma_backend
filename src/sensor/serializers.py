@@ -24,6 +24,8 @@ class ParkingSpotSerializer(serializers.ModelSerializer):
     is_reserved = serializers.SerializerMethodField()
     sensor = SensorSerializer(read_only=True)
     blocker = BlockerSerializer(read_only=True)
+    is_occupied = serializers.SerializerMethodField()
+    is_blocker_raised = serializers.SerializerMethodField()
 
     class Meta:
         model = ParkingSpot
@@ -40,6 +42,8 @@ class ParkingSpotSerializer(serializers.ModelSerializer):
             'longitude4',
             'price_per_hour',
             'is_reserved',
+            'is_occupied',
+            'is_blocker_raised',
             'sensor',
             'blocker',
             'created_at',
@@ -47,3 +51,13 @@ class ParkingSpotSerializer(serializers.ModelSerializer):
 
     def get_is_reserved(self, obj):
         return obj.is_reserved()
+
+    def get_is_occupied(self, obj):
+        if hasattr(obj, 'sensor'):
+            return obj.sensor.is_occupied
+        return False
+
+    def get_is_blocker_raised(self, obj):
+        if hasattr(obj, 'blocker'):
+            return obj.blocker.is_raised
+        return False

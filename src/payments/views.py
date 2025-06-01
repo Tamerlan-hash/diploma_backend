@@ -8,6 +8,7 @@ from .serializers import PaymentMethodSerializer, TransactionSerializer, WalletS
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from decimal import Decimal
+from parking.models import Reservation
 
 
 class PaymentMethodViewSet(viewsets.ModelViewSet):
@@ -270,6 +271,29 @@ class WalletViewSet(viewsets.GenericViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Validate reservation_id
+        if not reservation_id:
+            return Response(
+                {"error": "Reservation ID is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Get the reservation
+        try:
+            reservation = Reservation.objects.get(id=reservation_id, user=request.user)
+        except Reservation.DoesNotExist:
+            return Response(
+                {"error": "Reservation not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Check if reservation is already paid
+        if reservation.payment and reservation.payment.status == 'completed':
+            return Response(
+                {"error": "Reservation is already paid"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # Convert amount to Decimal
         try:
             amount = Decimal(amount)
@@ -284,14 +308,28 @@ class WalletViewSet(viewsets.GenericViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Create payment transaction
+        # Process payment using the reservation's wallet payment method
         try:
-            transaction = Transaction.create_wallet_payment(
+            success = reservation.process_wallet_payment()
+            if not success:
+                return Response(
+                    {"error": "Payment processing failed. Please check your wallet balance."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Get the transaction created by the reservation payment process
+            transaction = Transaction.objects.filter(
                 wallet=wallet,
-                amount=amount,
-                reservation_id=reservation_id,
-                description=description
-            )
+                reservation_id=str(reservation.id),
+                status='completed'
+            ).order_by('-created_at').first()
+
+            if not transaction:
+                return Response(
+                    {"error": "Transaction not found after payment processing"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+
             serializer = TransactionSerializer(transaction)
             return Response(serializer.data)
         except ValueError as e:
@@ -311,7 +349,7 @@ class PaymentProcessView(APIView):
         operation_description="Process a payment",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['amount', 'payment_method_id'],
+            required=['amount', 'payment_method_id', 'reservation_id'],
             properties={
                 'amount': openapi.Schema(type=openapi.TYPE_NUMBER),
                 'payment_method_id': openapi.Schema(type=openapi.TYPE_STRING),
@@ -322,20 +360,27 @@ class PaymentProcessView(APIView):
         responses={
             200: TransactionSerializer(),
             400: "Bad Request",
-            404: "Payment method not found"
+            404: "Payment method not found or Reservation not found"
         }
     )
     def post(self, request):
         # Get request data
         amount = request.data.get('amount')
         payment_method_id = request.data.get('payment_method_id')
-        reservation_id = request.data.get('reservation_id', '')
+        reservation_id = request.data.get('reservation_id')
         description = request.data.get('description', '')
 
         # Validate required fields
         if not amount or not payment_method_id:
             return Response(
                 {"error": "Amount and payment_method_id are required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate reservation_id
+        if not reservation_id:
+            return Response(
+                {"error": "Reservation ID is required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -348,19 +393,48 @@ class PaymentProcessView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Create transaction
-        transaction = Transaction.objects.create(
-            user=request.user,
-            payment_method=payment_method,
-            amount=amount,
-            reservation_id=reservation_id,
-            description=description
-        )
+        # Get the reservation
+        try:
+            reservation = Reservation.objects.get(id=reservation_id, user=request.user)
+        except Reservation.DoesNotExist:
+            return Response(
+                {"error": "Reservation not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        # Process payment (in a real system, this would integrate with a payment gateway)
-        # For this example, we'll just mark it as completed
-        transaction.mark_as_completed(transaction_id=f"TRANS-{transaction.id}")
+        # Check if reservation is already paid
+        if reservation.payment and reservation.payment.status == 'completed':
+            return Response(
+                {"error": "Reservation is already paid"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        # Return transaction data
-        serializer = TransactionSerializer(transaction)
-        return Response(serializer.data)
+        # Process payment using the reservation's card payment method
+        try:
+            success = reservation.process_card_payment(payment_method.id)
+            if not success:
+                return Response(
+                    {"error": "Payment processing failed"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Get the transaction created by the reservation payment process
+            transaction = Transaction.objects.filter(
+                payment_method=payment_method,
+                reservation_id=str(reservation.id),
+                status='completed'
+            ).order_by('-created_at').first()
+
+            if not transaction:
+                return Response(
+                    {"error": "Transaction not found after payment processing"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+
+            serializer = TransactionSerializer(transaction)
+            return Response(serializer.data)
+        except ValueError as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )

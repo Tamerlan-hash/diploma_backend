@@ -18,10 +18,17 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.http import JsonResponse
+from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import permissions
 
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
+
+# Simple view that returns CSRF token
+@ensure_csrf_cookie
+def get_csrf(request):
+    return JsonResponse({"detail": "CSRF cookie set"})
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -35,6 +42,7 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/', get_csrf, name='api-root'),  # Root API endpoint for CSRF token
     path('api/sensor/', include('sensor.urls')),
     path('api/auth/', include('users.urls')),
     path('api/parking/', include('parking.urls')),

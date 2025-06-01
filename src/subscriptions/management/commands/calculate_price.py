@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from django.contrib.auth.models import User
-from sensor.models import Sensor
+from sensor.models import ParkingSpot
 from subscriptions.models import calculate_price_with_subscription
 from decimal import Decimal
 import datetime
@@ -41,11 +41,11 @@ class Command(BaseCommand):
             try:
                 # Try to convert to UUID if it's in UUID format
                 uuid_obj = uuid.UUID(spot_id)
-                parking_spot = Sensor.objects.get(reference=uuid_obj)
+                parking_spot = ParkingSpot.objects.get(reference=uuid_obj)
             except (ValueError, TypeError):
                 # If not a valid UUID, try to get by name
-                parking_spot = Sensor.objects.get(name=spot_id)
-        except Sensor.DoesNotExist:
+                parking_spot = ParkingSpot.objects.get(name=spot_id)
+        except ParkingSpot.DoesNotExist:
             self.stdout.write(self.style.ERROR(f'Parking spot with ID/name {spot_id} not found'))
             return
 

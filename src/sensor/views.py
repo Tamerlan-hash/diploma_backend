@@ -88,3 +88,43 @@ def parking_spot_list(request):
     parking_spots = ParkingSpot.objects.all()
     serializer = ParkingSpotSerializer(parking_spots, many=True)
     return Response(serializer.data)
+
+
+class SensorUpdateAPIView(APIView):
+    """
+    API endpoint for sensors to update their occupation status.
+    Accepts a POST request with a JSON payload containing the sensor reference and its occupation status.
+    """
+    def post(self, request):
+        try:
+            reference = request.data.get('reference')
+            is_occupied = request.data.get('is_occupied', True)
+
+            # Find the sensor by reference
+            sensor = get_object_or_404(Sensor, reference=reference)
+
+            # Update the sensor status
+            sensor.set_occupied(is_occupied)
+
+            # Return the updated sensor
+            serializer = SensorSerializer(sensor)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class BlockerStatusAPIView(APIView):
+    """
+    API endpoint for blockers to check their status.
+    Accepts a GET request with the blocker reference in the URL.
+    """
+    def get(self, request, reference):
+        try:
+            # Find the blocker by reference
+            blocker = get_object_or_404(Blocker, reference=reference)
+
+            # Return the blocker status
+            serializer = BlockerSerializer(blocker)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

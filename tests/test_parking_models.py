@@ -6,8 +6,9 @@ from decimal import Decimal
 from django.db.utils import IntegrityError
 from django.core.exceptions import ValidationError
 from django.contrib.auth.models import User
-from sensor.models import Sensor
+from sensor.models import Sensor, ParkingSpot, Blocker
 from parking.models import Reservation, Payment
+from subscriptions.models import TariffZone
 
 @pytest.mark.django_db
 class TestReservationModel:
@@ -23,11 +24,31 @@ class TestReservationModel:
             password='testpassword'
         )
 
+        # Create a test parking spot
+        parking_spot = ParkingSpot.objects.create(
+            reference=uuid.uuid4(),
+            name='Test Parking Spot'
+        )
+
         # Create a test sensor
         sensor = Sensor.objects.create(
             reference=uuid.uuid4(),
-            name='Test Parking Spot',
-            is_lock=False
+            parking_spot=parking_spot,
+            is_occupied=False
+        )
+
+        # Create a blocker for the parking spot
+        blocker = Blocker.objects.create(
+            reference=uuid.uuid4(),
+            parking_spot=parking_spot,
+            is_raised=False
+        )
+
+        # Create a test tariff zone
+        tariff_zone = TariffZone.objects.create(
+            name='Test Tariff Zone',
+            description='Test tariff zone for testing',
+            is_active=True
         )
 
         # Set up time variables
@@ -37,7 +58,10 @@ class TestReservationModel:
 
         return {
             'user': user,
+            'parking_spot': parking_spot,
             'sensor': sensor,
+            'blocker': blocker,
+            'tariff_zone': tariff_zone,
             'now': now,
             'start_time': start_time,
             'end_time': end_time
@@ -49,13 +73,14 @@ class TestReservationModel:
 
         reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=data['start_time'],
             end_time=data['end_time'],
             status='pending'
         )
 
-        expected_str = f"{data['user'].username} - {data['sensor'].name} ({data['start_time']} to {data['end_time']})"
+        expected_str = f"{data['user'].username} - {data['parking_spot'].name} ({data['start_time']} to {data['end_time']})"
         assert str(reservation) == expected_str
 
     def test_reservation_is_active_method(self, setup_data):
@@ -66,7 +91,8 @@ class TestReservationModel:
         now = timezone.now()
         active_reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=now - timedelta(minutes=30),  # Started 30 minutes ago
             end_time=now + timedelta(minutes=30),    # Ends 30 minutes from now
             status='active'
@@ -75,7 +101,8 @@ class TestReservationModel:
         # Create a reservation that should not be active (future start time)
         future_reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=now + timedelta(hours=1),
             end_time=now + timedelta(hours=2),
             status='active'
@@ -84,7 +111,8 @@ class TestReservationModel:
         # Create a reservation that should not be active (past end time)
         past_reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=now - timedelta(hours=2),
             end_time=now - timedelta(hours=1),
             status='active'
@@ -93,7 +121,8 @@ class TestReservationModel:
         # Create a reservation that should not be active (wrong status)
         wrong_status_reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=now - timedelta(minutes=30),
             end_time=now + timedelta(minutes=30),
             status='pending'
@@ -110,20 +139,26 @@ class TestReservationModel:
 
         reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=data['start_time'],
             end_time=data['end_time'],
             status='pending'
         )
 
+        # Create a payment for the reservation
+        payment = Payment.objects.create(amount=Decimal('100.00'), status='completed')
+        reservation.payment = payment
+        reservation.save()
+
         reservation.activate()
 
         # Refresh from database
         reservation.refresh_from_db()
-        data['sensor'].refresh_from_db()
+        data['blocker'].refresh_from_db()
 
         assert reservation.status == 'active'
-        assert data['sensor'].is_lock is True
+        assert data['blocker'].is_raised is True
 
     def test_activate_method_from_non_pending(self, setup_data):
         """Test that activating a non-pending reservation has no effect."""
@@ -132,7 +167,8 @@ class TestReservationModel:
         # Create reservations with non-pending statuses
         active_reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=data['start_time'],
             end_time=data['end_time'],
             status='active'
@@ -140,7 +176,8 @@ class TestReservationModel:
 
         completed_reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=data['start_time'],
             end_time=data['end_time'],
             status='completed'
@@ -148,7 +185,8 @@ class TestReservationModel:
 
         cancelled_reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=data['start_time'],
             end_time=data['end_time'],
             status='cancelled'
@@ -175,23 +213,24 @@ class TestReservationModel:
 
         reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=data['start_time'],
             end_time=data['end_time'],
             status='active'
         )
 
-        # Lock the sensor
-        data['sensor'].lock()
+        # Raise the blocker
+        data['blocker'].raise_blocker()
 
         reservation.complete()
 
         # Refresh from database
         reservation.refresh_from_db()
-        data['sensor'].refresh_from_db()
+        data['blocker'].refresh_from_db()
 
         assert reservation.status == 'completed'
-        assert data['sensor'].is_lock is False
+        assert data['blocker'].is_raised is False
 
     def test_complete_method_from_non_active(self, setup_data):
         """Test that completing a non-active reservation has no effect."""
@@ -200,7 +239,8 @@ class TestReservationModel:
         # Create reservations with non-active statuses
         pending_reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=data['start_time'],
             end_time=data['end_time'],
             status='pending'
@@ -208,7 +248,8 @@ class TestReservationModel:
 
         completed_reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=data['start_time'],
             end_time=data['end_time'],
             status='completed'
@@ -216,7 +257,8 @@ class TestReservationModel:
 
         cancelled_reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=data['start_time'],
             end_time=data['end_time'],
             status='cancelled'
@@ -243,7 +285,8 @@ class TestReservationModel:
 
         reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=data['start_time'],
             end_time=data['end_time'],
             status='pending'
@@ -262,23 +305,24 @@ class TestReservationModel:
 
         reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=data['start_time'],
             end_time=data['end_time'],
             status='active'
         )
 
-        # Lock the sensor
-        data['sensor'].lock()
+        # Raise the blocker
+        data['blocker'].raise_blocker()
 
         reservation.cancel()
 
         # Refresh from database
         reservation.refresh_from_db()
-        data['sensor'].refresh_from_db()
+        data['blocker'].refresh_from_db()
 
         assert reservation.status == 'cancelled'
-        assert data['sensor'].is_lock is False
+        assert data['blocker'].is_raised is False
 
     def test_cancel_method_from_non_cancellable(self, setup_data):
         """Test that cancelling a completed reservation has no effect."""
@@ -287,7 +331,8 @@ class TestReservationModel:
         # Create a completed reservation
         completed_reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=data['start_time'],
             end_time=data['end_time'],
             status='completed'
@@ -310,7 +355,8 @@ class TestReservationModel:
         with pytest.raises(IntegrityError):
             Reservation.objects.create(
                 user=data['user'],
-                parking_spot=data['sensor'],
+                parking_spot=data['parking_spot'],
+                tariff_zone=data['tariff_zone'],
                 start_time=data['now'] + timedelta(hours=2),
                 end_time=data['now'] + timedelta(hours=1),  # Before start_time
                 status='pending'
@@ -323,7 +369,8 @@ class TestReservationModel:
         # Create a reservation for 2 hours with default price_per_hour (100.00)
         reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=data['start_time'],
             end_time=data['start_time'] + timedelta(hours=2),
             status='pending'
@@ -342,7 +389,8 @@ class TestReservationModel:
         # Create a reservation for 1.5 hours with default price_per_hour (100.00)
         reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=data['start_time'],
             end_time=data['start_time'] + timedelta(hours=1, minutes=30),
             status='pending'
@@ -361,7 +409,8 @@ class TestReservationModel:
         # Create a reservation
         reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=data['start_time'],
             end_time=data['start_time'] + timedelta(hours=2),
             status='pending'
@@ -387,7 +436,8 @@ class TestReservationModel:
         # Create a reservation
         reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=data['start_time'],
             end_time=data['start_time'] + timedelta(hours=2),
             status='pending'
@@ -417,7 +467,8 @@ class TestReservationModel:
         # Create a reservation
         reservation = Reservation.objects.create(
             user=data['user'],
-            parking_spot=data['sensor'],
+            parking_spot=data['parking_spot'],
+            tariff_zone=data['tariff_zone'],
             start_time=data['start_time'],
             end_time=data['start_time'] + timedelta(hours=2),
             status='pending'

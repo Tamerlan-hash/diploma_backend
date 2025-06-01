@@ -54,7 +54,7 @@ class TestUserProfile:
         }
 
         url = reverse('profile_update')
-        response = client.put(url, update_data, format='json')
+        response = client.put(url, update_data, format='multipart')
 
         assert response.status_code == 200
 
@@ -83,7 +83,7 @@ class TestUserProfile:
         }
 
         url = reverse('profile_update')
-        response = client.patch(url, update_data, format='json')
+        response = client.patch(url, update_data, format='multipart')
 
         assert response.status_code == 200
 
@@ -97,7 +97,7 @@ class TestUserProfile:
     def test_update_user_profile_unauthenticated(self, client):
         """Test that an unauthenticated user cannot update a profile."""
         url = reverse('profile_update')
-        response = client.put(url, {'car_number': 'TEST123'}, format='json')
+        response = client.put(url, {'car_number': 'TEST123'}, format='multipart')
 
         # Should return 401 Unauthorized
         assert response.status_code == 401

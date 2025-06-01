@@ -15,6 +15,7 @@ class ParkingSpot(models.Model):
     longitude3 = models.FloatField(null=True, blank=True)
     longitude4 = models.FloatField(null=True, blank=True)
     price_per_hour = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('100.00'))
+    tariff_zone = models.ForeignKey('subscriptions.TariffZone', on_delete=models.PROTECT, related_name='parking_spots')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

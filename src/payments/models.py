@@ -203,3 +203,27 @@ class Transaction(models.Model):
         wallet.deposit(amount)
 
         return transaction
+
+    @classmethod
+    def create_card_payment(cls, user, payment_method, amount, reservation_id=None, description=''):
+        """Create a payment using a card"""
+        if amount <= 0:
+            raise ValueError("Amount must be positive")
+
+        if not payment_method:
+            raise ValueError("Payment method is required")
+
+        transaction = cls.objects.create(
+            user=user,
+            payment_method=payment_method,
+            amount=amount,
+            transaction_type='card_payment',
+            reservation_id=reservation_id,
+            description=description or 'Payment with card'
+        )
+
+        # In a real system, this would integrate with a payment gateway
+        # For now, we'll just mark it as completed
+        transaction.mark_as_completed(transaction_id=f"CPAYMENT-{transaction.id}")
+
+        return transaction

@@ -1,7 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
-from sensor.models import Sensor
+from sensor.models import ParkingSpot, Sensor
 from decimal import Decimal
 
 
@@ -128,7 +128,7 @@ class TariffRule(models.Model):
 
     name = models.CharField(max_length=100)
     zone = models.ForeignKey(TariffZone, on_delete=models.CASCADE, related_name='tariff_rules')
-    parking_spot = models.ForeignKey(Sensor, on_delete=models.CASCADE, related_name='tariff_rules', null=True, blank=True)
+    parking_spot = models.ForeignKey(ParkingSpot, on_delete=models.CASCADE, related_name='tariff_rules', null=True, blank=True)
 
     # Time period
     time_period = models.CharField(max_length=20, choices=TIME_PERIOD_CHOICES, default='all_day')

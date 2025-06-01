@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 import os
 from pathlib import Path
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,20 +26,33 @@ SECRET_KEY = 'django-insecure-75069mn@r9hah80ve38t7!vmi+7)93!1ylyv^uau0dv0-73++#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['http://localhost:3001', 'localhost', 'localhost:8000', '127.0.0.1', 'https://api-diploma-smart-parking.yourbandy.com', 'api-diploma-smart-parking.yourbandy.com']
+ALLOWED_HOSTS = ['localhost', 'localhost:8000', '127.0.0.1', 'smart-parking-api.yourbandy.com']
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3001",       # Next.js dev
     "http://localhost:3000",       # Next.js dev
     "http://127.0.0.1:3001",
     "http://127.0.0.1:3000",
-    "https://diploma-smart-parking.yourbandy.com",  # ваш продакшен-фронтенд
+    "https://smart-parking-api.yourbandy.com",  # API backend
+    "https://smart-parking.yourbandy.com",      # Frontend domain
 ]
 CORS_ALLOW_CREDENTIALS = True
 
 from corsheaders.defaults import default_headers
 CORS_ALLOW_HEADERS = list(default_headers) + [
     'authorization',
+    'x-csrftoken',
 ]
+
+# Настройки для сессионной аутентификации
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
+SESSION_COOKIE_SAMESITE = 'Lax'  # 'Lax' allows redirects from external sites
+
+# CSRF settings
+CSRF_COOKIE_HTTPONLY = False  # False allows JavaScript to access the token
+CSRF_COOKIE_SECURE = False  # Set to True in production with HTTPS
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
 # Application definition
 
@@ -51,41 +65,72 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
+    'diploma_smart_parking',
     'sensor',
     'users',
     'parking',
     'payments',
     'subscriptions',
+    'notifications',
     'drf_yasg',
 ]
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
 }
 
+# JWT settings
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': False,
+
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'VERIFYING_KEY': None,
+    'AUDIENCE': None,
+    'ISSUER': None,
+    'JWK_URL': None,
+    'LEEWAY': 0,
+
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
+
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'TOKEN_TYPE_CLAIM': 'token_type',
+    'TOKEN_USER_CLASS': 'rest_framework_simplejwt.models.TokenUser',
+
+    'JTI_CLAIM': 'jti',
+
+    'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
+    'SLIDING_TOKEN_LIFETIME': timedelta(minutes=15),
+    'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=7),
+}
+
 SWAGGER_SETTINGS = {
-    # Описание того, как передавать JWT:
-    'SECURITY_DEFINITIONS': {
-        'Bearer': {
-            'type': 'apiKey',
-            'name': 'Authorization',
-            'in': 'header',
-            'description': 'JWT Authorization header: "Bearer <token>"',
-        }
-    },
-    # По-умолчанию не накладываем security на все эндпоинты
-    'USE_SESSION_AUTH': False,
+    # Используем сессионную аутентификацию для Swagger UI
+    'USE_SESSION_AUTH': True,
+    'LOGIN_URL': '/admin/login/',
+    'LOGOUT_URL': '/admin/logout/',
     'DEFAULT_SECURITY': [],
 }
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # WhiteNoise middleware for static files
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -154,7 +199,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Almaty'
 
 USE_I18N = True
 
@@ -174,6 +219,15 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
+
+# WhiteNoise configuration
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+
+# WhiteNoise settings
+WHITENOISE_MAX_AGE = 31536000  # 1 year in seconds
+WHITENOISE_AUTOREFRESH = DEBUG  # Refresh static files on each request when DEBUG is True
+WHITENOISE_USE_FINDERS = DEBUG  # Use Django's finders to locate static files when DEBUG is True
+WHITENOISE_MANIFEST_STRICT = False  # Don't raise errors for missing files in the manifest
 
 # Media files (User uploaded files)
 MEDIA_URL = '/media/'

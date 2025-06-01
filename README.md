@@ -1,115 +1,63 @@
-# Smart Parking System
+# Diploma Smart Parking Backend
 
-A Django REST API for a smart parking system that allows users to register, authenticate, and manage parking sensors.
+## Reservation Flow
 
-## Features
+The system implements the following reservation flow:
 
-- User registration and authentication with JWT tokens
-- User profiles with car information (number and model)
-- Parking sensor management
-- API documentation with Swagger/ReDoc
+1. User registers and logs in to the application
+2. User selects a parking spot on the map
+3. User initiates a reservation by clicking "Reserve"
+4. User completes payment (via bank card or wallet balance)
+5. After successful payment, the parking blocker is raised and waits for the user
+6. User arrives at the parking spot and lowers the blocker through the application
+7. User parks their car
+8. When the reservation time is about to expire, the user receives a notification
+9. User can extend the reservation if the spot is not reserved by another user
 
-## Project Structure
+## Payment Options
 
-The project is organized into the following main components:
+The system supports two payment methods:
 
-- `src/` - Main source code directory
-  - `diploma_smart_parking/` - Project settings and main URL configuration
-  - `users/` - User authentication and profile management
-  - `sensor/` - Parking sensor management
-- `tests/` - End-to-end API tests
+1. **Bank Card Payment**: User can add and use bank cards for payments
+2. **Wallet Balance**: User can deposit money to their wallet and use it for payments
 
-## API Endpoints
+## Notifications
 
-### Authentication
+The system sends notifications to users in the following cases:
 
-- `POST /api/auth/register/` - Register a new user
-- `POST /api/auth/login/` - Obtain JWT tokens (access and refresh)
-- `POST /api/auth/refresh/` - Refresh an expired access token
-- `GET /api/auth/me/` - Get current user details
+1. When a reservation is about to expire (30 minutes before)
+   - If the spot is available for extension, the notification includes this option
+   - If another user has reserved the spot, the notification informs about this
+2. When a payment is successful
+3. When a reservation is extended
 
-### Sensors
+## Implementation Details
 
-- `GET /api/sensor/` - List all sensors
-- `POST /api/sensor/lock/<reference>/` - Lock a parking spot
-- `POST /api/sensor/unlock/<reference>/` - Unlock a parking spot
+### Models
 
-## Setup and Installation
+- **Reservation**: Manages parking spot reservations
+- **Payment**: Tracks payments for reservations
+- **Transaction**: Records financial transactions (card payments, wallet deposits/withdrawals)
+- **Wallet**: Manages user wallet balances
+- **PaymentMethod**: Stores user payment methods (credit/debit cards)
+- **Blocker**: Controls physical parking blockers
+- **Notification**: Stores user notifications
 
-### Prerequisites
+### Key Features
 
-- Python 3.11+
-- Poetry (for dependency management)
-- PostgreSQL
+- **User Arrival**: When a user arrives, they can lower the blocker through the app
+- **Reservation Extension**: Users can extend active reservations if the spot is available
+- **Expiration Notifications**: System automatically notifies users about expiring reservations
+- **Multiple Payment Options**: Support for both card payments and wallet balance
 
-### Installation
+## Setup and Configuration
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd diploma_smart_parking
-```
+1. Make sure to run migrations to create the necessary database tables:
+   ```
+   python manage.py makemigrations
+   python manage.py migrate
+   ```
 
-2. Install dependencies:
-```bash
-poetry install
-```
-
-3. Set up environment variables (create a `.env` file in the `src/` directory):
-```
-POSTGRES_DB=diploma_smart_parking
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgrespw
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-```
-
-4. Run migrations:
-```bash
-cd src
-python manage.py migrate
-```
-
-5. Start the development server:
-```bash
-python manage.py runserver
-```
-
-### Docker Setup
-
-Alternatively, you can use Docker:
-
-```bash
-docker build -t smart-parking .
-docker run -p 8000:8000 smart-parking
-```
-
-## Testing
-
-The project includes end-to-end tests for the API endpoints. To run the tests:
-
-```bash
-python -m pytest
-```
-
-For more information about the tests, see the [tests README](tests/README.md).
-
-## API Documentation
-
-API documentation is available at:
-
-- Swagger UI: `/swagger/`
-- ReDoc: `/redoc/`
-
-## Development
-
-### Adding New Features
-
-1. Create a new branch for your feature
-2. Implement the feature
-3. Write tests for the feature
-4. Submit a pull request
-
-### Code Style
-
-This project follows PEP 8 style guidelines.
+2. Set up a task scheduler (like Celery) to run the following tasks periodically:
+   - `parking.tasks.check_expiring_reservations`: Sends notifications for reservations about to expire
+   - `parking.tasks.auto_complete_expired_reservations`: Automatically completes expired reservations

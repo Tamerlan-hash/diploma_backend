@@ -14,11 +14,16 @@ class PaymentSerializer(serializers.ModelSerializer):
 class ReservationSerializer(serializers.ModelSerializer):
     payment_status = serializers.SerializerMethodField()
     total_price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    selected_hours = serializers.JSONField(required=False)
+    payment_method_type = serializers.CharField(required=False, write_only=True)
+    payment_method_id = serializers.IntegerField(required=False, write_only=True, allow_null=True)
+    parking_spot = serializers.PrimaryKeyRelatedField(queryset=ParkingSpot.objects.all(), required=True)
 
     class Meta:
         model = Reservation
         fields = ['id', 'user', 'parking_spot', 'start_time', 'end_time', 'status', 
-                 'total_price', 'payment_status', 'created_at', 'updated_at']
+                 'total_price', 'payment_status', 'created_at', 'updated_at', 'selected_hours',
+                 'payment_method_type', 'payment_method_id']
         read_only_fields = ['user', 'status', 'total_price', 'payment_status', 'created_at', 'updated_at']
 
     def get_payment_status(self, obj):
@@ -27,78 +32,199 @@ class ReservationSerializer(serializers.ModelSerializer):
         return obj.payment.status
 
     def validate(self, data):
-        # Ensure end_time is after start_time
-        if data['end_time'] <= data['start_time']:
-            raise serializers.ValidationError("End time must be after start time")
+        # Check if we're using hourly booking
+        selected_hours = data.get('selected_hours', [])
 
-        # Ensure start_time is not in the past
-        if data['start_time'] < timezone.now():
-            raise serializers.ValidationError("Start time cannot be in the past")
+        if selected_hours:
+            # Validate selected_hours format
+            if not isinstance(selected_hours, list):
+                raise serializers.ValidationError({"selected_hours": "Must be a list of hour slots"})
 
-        # Ensure start_time is on an hourly boundary (minutes, seconds, microseconds are all 0)
-        start_time = data['start_time']
-        if start_time.minute != 0 or start_time.second != 0 or start_time.microsecond != 0:
-            raise serializers.ValidationError("Start time must be at the beginning of an hour (e.g., 10:00, 11:00)")
+            if not selected_hours:
+                raise serializers.ValidationError({"selected_hours": "At least one hour slot must be selected"})
 
-        # Ensure end_time is on an hourly boundary (minutes, seconds, microseconds are all 0)
-        end_time = data['end_time']
-        if end_time.minute != 0 or end_time.second != 0 or end_time.microsecond != 0:
-            raise serializers.ValidationError("End time must be at the beginning of an hour (e.g., 10:00, 11:00)")
+            # Validate each hour slot
+            now = timezone.now()
+            parking_spot = data['parking_spot']
 
-        # Ensure the duration is a whole number of hours
-        duration_seconds = (end_time - start_time).total_seconds()
-        duration_hours = duration_seconds / 3600
-        if duration_hours <= 0 or duration_seconds % 3600 != 0:
-            raise serializers.ValidationError("Reservation duration must be a whole number of hours")
+            # Set start_time and end_time based on selected hours
+            start_times = []
+            end_times = []
 
-        # Check for overlapping reservations
-        parking_spot = data['parking_spot']
+            for i, slot in enumerate(selected_hours):
+                if not isinstance(slot, dict) or 'start' not in slot or 'end' not in slot:
+                    raise serializers.ValidationError({"selected_hours": f"Invalid format for slot {i}"})
 
-        # Exclude current reservation when updating
-        exclude_id = self.instance.id if self.instance else None
+                try:
+                    start = timezone.datetime.fromisoformat(slot['start'])
+                    end = timezone.datetime.fromisoformat(slot['end'])
 
-        overlapping_reservations = Reservation.objects.filter(
-            parking_spot=parking_spot,
-            status__in=['pending', 'active'],
-            start_time__lt=end_time,
-            end_time__gt=start_time
-        )
+                    # Ensure each slot is exactly 1 hour
+                    duration_seconds = (end - start).total_seconds()
+                    if duration_seconds != 3600:  # 3600 seconds = 1 hour
+                        raise serializers.ValidationError({"selected_hours": f"Slot {i} must be exactly 1 hour"})
 
-        if exclude_id:
-            overlapping_reservations = overlapping_reservations.exclude(id=exclude_id)
 
-        if overlapping_reservations.exists():
-            raise serializers.ValidationError("This parking spot is already reserved for the selected time period")
+                    # Check for overlapping reservations
+                    exclude_id = self.instance.id if self.instance else None
+
+                    overlapping_reservations = Reservation.objects.filter(
+                        parking_spot=parking_spot,
+                        status__in=['pending', 'active'],
+                        start_time__lt=end,
+                        end_time__gt=start
+                    )
+
+                    if exclude_id:
+                        overlapping_reservations = overlapping_reservations.exclude(id=exclude_id)
+
+                    if overlapping_reservations.exists():
+                        raise serializers.ValidationError({"selected_hours": f"Slot {i} overlaps with an existing reservation"})
+
+                    start_times.append(start)
+                    end_times.append(end)
+
+                except (ValueError, TypeError):
+                    raise serializers.ValidationError({"selected_hours": f"Invalid datetime format for slot {i}"})
+
+            # Set overall start_time and end_time
+            if start_times and end_times:
+                data['start_time'] = min(start_times)
+                data['end_time'] = max(end_times)
+        else:
+            # Traditional validation for non-hourly bookings
+            # Ensure end_time is after start_time
+            if data['end_time'] <= data['start_time']:
+                raise serializers.ValidationError({"non_field_errors": ["End time must be after start time"]})
+
+
+            # Get start and end times
+            start_time = data['start_time']
+            end_time = data['end_time']
+
+            # Ensure minimum duration of 1 hour
+            duration_seconds = (end_time - start_time).total_seconds()
+            if duration_seconds < 3600:  # 3600 seconds = 1 hour
+                raise serializers.ValidationError({"non_field_errors": ["Reservation must be at least 1 hour long"]})
+
+            # Check for overlapping reservations
+            parking_spot = data['parking_spot']
+
+            # Exclude current reservation when updating
+            exclude_id = self.instance.id if self.instance else None
+
+            overlapping_reservations = Reservation.objects.filter(
+                parking_spot=parking_spot,
+                status__in=['pending', 'active'],
+                start_time__lt=end_time,
+                end_time__gt=start_time
+            )
+
+            if exclude_id:
+                overlapping_reservations = overlapping_reservations.exclude(id=exclude_id)
+
+            if overlapping_reservations.exists():
+                raise serializers.ValidationError({"non_field_errors": ["This parking spot is already reserved for the selected time period"]})
 
         return data
 
     def create(self, validated_data):
+        # Extract payment method data
+        payment_method_type = validated_data.pop('payment_method_type', None)
+        payment_method_id = validated_data.pop('payment_method_id', None)
+
         # Set the user to the current user
         validated_data['user'] = self.context['request'].user
-        return super().create(validated_data)
+
+        # Create the reservation
+        reservation = super().create(validated_data)
+
+        # Calculate total price
+        reservation.total_price = reservation.calculate_total_price()
+        reservation.save(update_fields=['total_price'])
+
+        # Process payment if payment method is provided
+        if payment_method_type:
+            try:
+                if payment_method_type == 'wallet':
+                    # Process wallet payment
+                    reservation.process_wallet_payment()
+                elif payment_method_type == 'card' and payment_method_id:
+                    # Process card payment
+                    reservation.process_card_payment(payment_method_id)
+                else:
+                    # Create payment without processing
+                    reservation.create_payment()
+            except Exception as e:
+                # If payment processing fails, still return the reservation
+                # but with an error message
+                reservation.status = 'pending'
+                reservation.save()
+                # You might want to log the error here
+                print(f"Payment processing error: {str(e)}")
+
+        return reservation
 
 class ReservationDetailSerializer(ReservationSerializer):
     parking_spot = ParkingSpotSerializer(read_only=True)
     payment = PaymentSerializer(read_only=True)
+    is_occupied = serializers.SerializerMethodField()
+    is_blocker_raised = serializers.SerializerMethodField()
+    can_control_blocker = serializers.SerializerMethodField()
 
     class Meta(ReservationSerializer.Meta):
-        fields = ReservationSerializer.Meta.fields + ['payment']
-        read_only_fields = ReservationSerializer.Meta.read_only_fields + ['parking_spot', 'payment']
+        fields = ReservationSerializer.Meta.fields + ['payment', 'is_occupied', 'is_blocker_raised', 'can_control_blocker']
+        read_only_fields = ReservationSerializer.Meta.read_only_fields + ['parking_spot', 'payment', 'is_occupied', 'is_blocker_raised', 'can_control_blocker']
+
+    def get_can_control_blocker(self, obj):
+        """Check if user can control the blocker for this reservation"""
+        # User can control blocker if reservation is active and paid
+        return obj.status == 'active' and obj.payment and obj.payment.status == 'completed'
+
+    def get_is_occupied(self, obj):
+        if hasattr(obj.parking_spot, 'sensor'):
+            return obj.parking_spot.sensor.is_occupied
+        return False
+
+    def get_is_blocker_raised(self, obj):
+        if hasattr(obj.parking_spot, 'blocker'):
+            return obj.parking_spot.blocker.is_raised
+        return False
 
 class ReservationListSerializer(serializers.ModelSerializer):
     parking_spot_name = serializers.CharField(source='parking_spot.name', read_only=True)
     payment_status = serializers.SerializerMethodField()
     total_price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    is_occupied = serializers.SerializerMethodField()
+    is_blocker_raised = serializers.SerializerMethodField()
+    can_control_blocker = serializers.SerializerMethodField()
+    selected_hours = serializers.JSONField(read_only=True)
 
     class Meta:
         model = Reservation
-        fields = ['id', 'parking_spot_name', 'start_time', 'end_time', 'status', 'total_price', 'payment_status']
+        fields = ['id', 'parking_spot_name', 'start_time', 'end_time', 'status', 'total_price', 
+                 'payment_status', 'is_occupied', 'is_blocker_raised', 'can_control_blocker', 'selected_hours']
         read_only_fields = fields
 
     def get_payment_status(self, obj):
         if not obj.payment:
             return 'not_created'
         return obj.payment.status
+
+    def get_is_occupied(self, obj):
+        if hasattr(obj.parking_spot, 'sensor'):
+            return obj.parking_spot.sensor.is_occupied
+        return False
+
+    def get_is_blocker_raised(self, obj):
+        if hasattr(obj.parking_spot, 'blocker'):
+            return obj.parking_spot.blocker.is_raised
+        return False
+
+    def get_can_control_blocker(self, obj):
+        """Check if user can control the blocker for this reservation"""
+        # User can control blocker if reservation is active and paid
+        return obj.status == 'active' and obj.payment and obj.payment.status == 'completed'
 
 class TimeSlotReservationsSerializer(serializers.Serializer):
     """

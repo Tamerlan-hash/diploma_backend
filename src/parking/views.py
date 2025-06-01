@@ -16,7 +16,7 @@ from .serializers import (
     ReservationSerializer, ReservationDetailSerializer, ReservationListSerializer,
     PaymentSerializer, TimeSlotReservationsSerializer
 )
-from sensor.models import Sensor
+from sensor.models import Sensor, ParkingSpot, Blocker
 
 class ReservationListCreateView(generics.ListCreateAPIView):
     """
@@ -88,14 +88,14 @@ class AvailableParkingSpotsView(APIView):
         ).values_list('parking_spot_id', flat=True)
 
         # Filter out reserved spots
-        available_spots = all_spots.exclude(reference__in=reserved_spot_ids)
+        available_spots = all_spots.exclude(parking_spot__reference__in=reserved_spot_ids)
 
         serializer = SensorSerializer(available_spots, many=True)
         return Response(serializer.data)
 
 class ReservationActionView(APIView):
     """
-    Perform actions on a reservation (activate, complete, cancel).
+    Perform actions on a reservation (activate, complete, cancel, raise_blocker, lower_blocker).
     """
     permission_classes = [IsAuthenticated]
 
@@ -103,23 +103,88 @@ class ReservationActionView(APIView):
         return get_object_or_404(Reservation, pk=pk, user=self.request.user)
 
     @swagger_auto_schema(
-        operation_description="Activate a reservation",
+        operation_description="Perform an action on a reservation",
         responses={200: ReservationDetailSerializer()}
     )
     def post(self, request, pk, action):
         reservation = self.get_reservation(pk)
 
-        if action == 'activate':
-            reservation.activate()
-        elif action == 'complete':
-            reservation.complete()
-        elif action == 'cancel':
-            reservation.cancel()
-        else:
-            return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            if action == 'activate':
+                reservation.activate()
+            elif action == 'complete':
+                reservation.complete()
+            elif action == 'cancel':
+                reservation.cancel()
+            elif action == 'raise_blocker':
+                # Check if reservation is active and paid
+                if reservation.status != 'active':
+                    return Response({"error": "Reservation must be active to control blocker"}, 
+                                   status=status.HTTP_400_BAD_REQUEST)
+                if not reservation.payment or reservation.payment.status != 'completed':
+                    return Response({"error": "Reservation must be paid to control blocker"}, 
+                                   status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = ReservationDetailSerializer(reservation)
-        return Response(serializer.data)
+                # Raise the blocker
+                try:
+                    reservation.parking_spot.blocker.raise_blocker()
+                except Exception as e:
+                    return Response({"error": f"Error raising blocker: {str(e)}"}, 
+                                   status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            elif action == 'lower_blocker':
+                # Check if reservation is active and paid
+                if reservation.status != 'active':
+                    return Response({"error": "Reservation must be active to control blocker"}, 
+                                   status=status.HTTP_400_BAD_REQUEST)
+                if not reservation.payment or reservation.payment.status != 'completed':
+                    return Response({"error": "Reservation must be paid to control blocker"}, 
+                                   status=status.HTTP_400_BAD_REQUEST)
+
+                # Lower the blocker
+                try:
+                    reservation.parking_spot.blocker.lower_blocker()
+                except Exception as e:
+                    return Response({"error": f"Error lowering blocker: {str(e)}"}, 
+                                   status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            elif action == 'user-arrive':
+                # Check if reservation is active and paid
+                if reservation.status != 'active':
+                    return Response({"error": "Reservation must be active to mark arrival"}, 
+                                   status=status.HTTP_400_BAD_REQUEST)
+                if not reservation.payment or reservation.payment.status != 'completed':
+                    return Response({"error": "Reservation must be paid to mark arrival"}, 
+                                   status=status.HTTP_400_BAD_REQUEST)
+
+                # Mark user as arrived and lower the blocker
+                try:
+                    success = reservation.user_arrive()
+                    if not success:
+                        return Response({"error": "Failed to mark arrival"}, 
+                                       status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+                    # Create a notification for successful arrival
+                    try:
+                        from notifications.models import Notification
+                        Notification.create_notification(
+                            user=reservation.user,
+                            notification_type='arrival_successful',
+                            title="Barrier Lowered",
+                            message=f"The barrier has been lowered for parking spot {reservation.parking_spot.name}. You can now enter.",
+                            reservation_id=str(reservation.id)
+                        )
+                    except Exception as e:
+                        print(f"Error creating arrival notification: {e}")
+
+                except Exception as e:
+                    return Response({"error": f"Error marking arrival: {str(e)}"}, 
+                                   status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            else:
+                return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
+
+            serializer = ReservationDetailSerializer(reservation)
+            return Response(serializer.data)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class UserReservationsView(generics.ListAPIView):
     """
@@ -167,6 +232,7 @@ class ReservationPaymentView(APIView):
             # Process the payment
             payment_method = request.data.get('payment_method', '')
             transaction_id = request.data.get('transaction_id', '')
+            payment_method_id = request.data.get('payment_method_id', '')
 
             if not reservation.payment:
                 return Response(
@@ -180,7 +246,37 @@ class ReservationPaymentView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            reservation.process_payment(payment_method, transaction_id)
+            # If payment_method_id is provided, use card payment
+            if payment_method_id:
+                try:
+                    success = reservation.process_card_payment(payment_method_id)
+                    if not success:
+                        return Response(
+                            {"error": "Payment processing failed"},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                except ValueError as e:
+                    return Response(
+                        {"error": str(e)},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            else:
+                # Use generic payment processing
+                reservation.process_payment(payment_method, transaction_id)
+
+            # Create a notification for successful payment
+            try:
+                from notifications.models import Notification
+                Notification.create_notification(
+                    user=reservation.user,
+                    notification_type='payment_successful',
+                    title="Payment Successful",
+                    message=f"Your payment for parking spot {reservation.parking_spot.name} was successful. The barrier has been raised.",
+                    reservation_id=str(reservation.id)
+                )
+            except Exception as e:
+                print(f"Error creating payment notification: {e}")
+
             serializer = PaymentSerializer(reservation.payment)
             return Response(serializer.data)
 
@@ -199,22 +295,26 @@ class ReservationPaymentView(APIView):
                 )
 
             try:
-                # Get user's wallet
-                wallet = Wallet.objects.get(user=request.user)
+                # Process payment using the reservation's wallet payment method
+                success = reservation.process_wallet_payment()
+                if not success:
+                    return Response(
+                        {"error": "Payment processing failed. Please check your wallet balance."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
 
-                # Create wallet payment transaction
-                transaction = Transaction.create_wallet_payment(
-                    wallet=wallet,
-                    amount=reservation.total_price,
-                    reservation_id=str(reservation.id),
-                    description=f"Payment for reservation #{reservation.id}"
-                )
-
-                # Update reservation payment
-                reservation.process_payment(
-                    payment_method='wallet',
-                    transaction_id=transaction.transaction_id
-                )
+                # Create a notification for successful payment
+                try:
+                    from notifications.models import Notification
+                    Notification.create_notification(
+                        user=reservation.user,
+                        notification_type='payment_successful',
+                        title="Payment Successful",
+                        message=f"Your payment for parking spot {reservation.parking_spot.name} was successful. The barrier has been raised.",
+                        reservation_id=str(reservation.id)
+                    )
+                except Exception as e:
+                    print(f"Error creating payment notification: {e}")
 
                 # Return payment details
                 serializer = PaymentSerializer(reservation.payment)
@@ -308,11 +408,18 @@ class ParkingSpotAvailableWindowsView(APIView):
             try:
                 # Try to convert to UUID if it's in UUID format
                 uuid_obj = uuid.UUID(spot_id)
-                parking_spot = Sensor.objects.get(reference=uuid_obj)
+                # First try to find the ParkingSpot
+                try:
+                    parking_spot_obj = ParkingSpot.objects.get(reference=uuid_obj)
+                    # Then get the associated Sensor
+                    parking_spot = parking_spot_obj.sensor
+                except ParkingSpot.DoesNotExist:
+                    # If ParkingSpot not found, try to find Sensor directly
+                    parking_spot = Sensor.objects.get(reference=uuid_obj)
             except (ValueError, TypeError):
                 # If not a valid UUID, try to get by name
                 parking_spot = Sensor.objects.get(name=spot_id)
-        except Sensor.DoesNotExist:
+        except (Sensor.DoesNotExist, ParkingSpot.DoesNotExist):
             return Response({"error": "Parking spot not found"}, status=status.HTTP_404_NOT_FOUND)
 
         # Parse parameters
@@ -333,24 +440,39 @@ class ParkingSpotAvailableWindowsView(APIView):
             return Response({"error": "Invalid date format. Use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Get reservations for this parking spot on the selected date
+        # parking_spot is a Sensor object, but Reservation.parking_spot is a foreign key to ParkingSpot
+        # So we need to use the ParkingSpot object associated with the Sensor
         reservations = Reservation.objects.filter(
-            parking_spot=parking_spot,
+            parking_spot=parking_spot.parking_spot,
             status__in=['pending', 'active'],
             start_time__lt=end_time,
             end_time__gt=start_time
         ).order_by('start_time')
 
-        # Create a list of all hours in the day
+        # Get current time for checking past slots
+        now = timezone.now()
+
+        # Create a list of hours for the selected date
         hourly_slots = []
-        current_hour = start_time.replace(minute=0, second=0, microsecond=0)
+
+        # For today, start from current time + 1 hour
+        # For future dates, start from the beginning of the day
+        if selected_date == timezone.now().date():
+            # Start from current time + 1 hour, rounded up to the next hour
+            current_hour = now + timedelta(hours=1)
+            # Round up to the next hour
+            if current_hour.minute > 0 or current_hour.second > 0:
+                current_hour = current_hour.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+            else:
+                current_hour = current_hour.replace(minute=0, second=0, microsecond=0)
+        else:
+            # For future dates, start from the beginning of the day
+            current_hour = start_time.replace(minute=0, second=0, microsecond=0)
 
         while current_hour < end_time:
             next_hour = current_hour + timedelta(hours=1)
             hourly_slots.append((current_hour, next_hour))
             current_hour = next_hour
-
-        # Get current time for checking past slots
-        now = timezone.now()
 
         # Process all slots and mark their status
         hourly_windows = []
@@ -360,19 +482,14 @@ class ParkingSpotAvailableWindowsView(APIView):
             status = "available"
             reason = None
 
-            # Check if this slot has already ended
-            if slot_end < now:
-                status = "blocked"
-                reason = "past_time"
-            else:
-                # Check if this hourly slot overlaps with any reservation
-                for reservation in reservations:
-                    # If reservation overlaps with this slot, mark as blocked
-                    if (reservation.start_time < slot_end and 
-                        reservation.end_time > slot_start):
-                        status = "blocked"
-                        reason = "already_booked"
-                        break
+            # Check if this hourly slot overlaps with any reservation
+            for reservation in reservations:
+                # If reservation overlaps with this slot, mark as blocked
+                if (reservation.start_time < slot_end and 
+                    reservation.end_time > slot_start):
+                    status = "blocked"
+                    reason = "already_booked"
+                    break
 
             hourly_windows.append({
                 'start_time': slot_start.isoformat(),

@@ -1,7 +1,7 @@
 # views.py
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status, permissions
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -90,21 +90,40 @@ def parking_spot_list(request):
     return Response(serializer.data)
 
 
-class SensorUpdateAPIView(APIView):
+class SensorOccupyAPIView(APIView):
     """
-    API endpoint for sensors to update their occupation status.
-    Accepts a POST request with a JSON payload containing the sensor reference and its occupation status.
+    API endpoint for sensors to update their occupation status to occupied.
+    Accepts a POST request with the sensor reference in the URL.
     """
-    def post(self, request):
+    permission_classes = [permissions.AllowAny]
+    def post(self, request, reference):
         try:
-            reference = request.data.get('reference')
-            is_occupied = request.data.get('is_occupied', True)
-
             # Find the sensor by reference
             sensor = get_object_or_404(Sensor, reference=reference)
 
-            # Update the sensor status
-            sensor.set_occupied(is_occupied)
+            # Update the sensor status to occupied
+            sensor.set_occupied(True)
+
+            # Return the updated sensor
+            serializer = SensorSerializer(sensor)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class SensorUnoccupyAPIView(APIView):
+    """
+    API endpoint for sensors to update their occupation status to unoccupied.
+    Accepts a POST request with the sensor reference in the URL.
+    """
+    permission_classes = [permissions.AllowAny]
+    def post(self, request, reference):
+        try:
+            # Find the sensor by reference
+            sensor = get_object_or_404(Sensor, reference=reference)
+
+            # Update the sensor status to unoccupied
+            sensor.set_occupied(False)
 
             # Return the updated sensor
             serializer = SensorSerializer(sensor)

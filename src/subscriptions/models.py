@@ -200,12 +200,14 @@ def calculate_price_with_subscription(user, parking_spot, start_time, end_time):
     Calculate the price for a parking spot reservation with subscription discount if applicable.
     """
     # Check if user has active subscription
-    active_subscription = UserSubscription.objects.filter(
-        user=user,
-        status='active',
-        start_date__lte=timezone.now(),
-        end_date__gte=timezone.now()
-    ).first()
+    active_subscription = None
+    if hasattr(user, 'is_authenticated') and user.is_authenticated:
+        active_subscription = UserSubscription.objects.filter(
+            user=user,
+            status='active',
+            start_date__lte=timezone.now(),
+            end_date__gte=timezone.now()
+        ).first()
 
     # Get applicable tariff rules
     applicable_rules = []

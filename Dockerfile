@@ -1,10 +1,12 @@
 # =====================
 # 1. Стадия сборки
 # =====================
-FROM mwalbeck/python-poetry:2.1-3.11 AS builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
+# Установка Poetry
+RUN pip install poetry==2.1.0
 # Указываем, чтобы venv создавался в /app/.venv
 RUN poetry config virtualenvs.in-project true
 

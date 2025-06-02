@@ -5,7 +5,8 @@ from .views import (
     LowerBlockerAPIView,
     SetSensorOccupiedAPIView,
     parking_spot_list,
-    SensorUpdateAPIView,
+    SensorOccupyAPIView,
+    SensorUnoccupyAPIView,
     BlockerStatusAPIView,
 )
 
@@ -17,6 +18,7 @@ urlpatterns = [
     path('sensor/set-vacant/<str:reference>/', SetSensorOccupiedAPIView.as_view(), {'occupied': False}, name='set_sensor_vacant'),
 
     # New API endpoints
-    path('sensor/update/', SensorUpdateAPIView.as_view(), name='sensor_update'),  # POST endpoint for sensors to update their status
+    path('sensor/occupy/<str:reference>/', SensorOccupyAPIView.as_view(), name='sensor_occupy'),  # POST endpoint for sensors to update their status to occupied
+    path('sensor/unoccupy/<str:reference>/', SensorUnoccupyAPIView.as_view(), name='sensor_unoccupy'),  # POST endpoint for sensors to update their status to unoccupied
     path('blocker/status/<str:reference>/', BlockerStatusAPIView.as_view(), name='blocker_status'),  # GET endpoint for blockers to check their status
 ]

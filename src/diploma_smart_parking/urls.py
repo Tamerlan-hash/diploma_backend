@@ -48,6 +48,7 @@ urlpatterns = [
     path('api/parking/', include('parking.urls')),
     path('api/payments/', include('payments.urls')),
     path('api/subscriptions/', include('subscriptions.urls')),
+    path('api/contacts/', include('contacts.urls')),
     # Схема без UI (JSON/YAML)
     path('swagger<str:format>', schema_view.without_ui(cache_timeout=0), name='schema-json'),
     # Swagger UI

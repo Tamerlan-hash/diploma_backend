@@ -14,7 +14,7 @@ from django.utils import timezone
 from .models import Reservation, Payment
 from .serializers import (
     ReservationSerializer, ReservationDetailSerializer, ReservationListSerializer,
-    PaymentSerializer, TimeSlotReservationsSerializer
+    PaymentSerializer, TimeSlotReservationsSerializer, UserBookingHoursSerializer
 )
 from sensor.models import Sensor, ParkingSpot, Blocker
 
@@ -384,6 +384,43 @@ class TimeSlotReservationsView(APIView):
         return Response(result)
 
 
+class UserBookingHoursView(APIView):
+    """
+    Get a list of users and their booking hours for a specific parking spot.
+    This view returns information about how many hours each user has booked a particular parking spot.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="Get a list of users and their booking hours for a specific parking spot",
+        responses={
+            200: 'List of users and their booking hours',
+            404: 'Parking spot not found'
+        }
+    )
+    def get(self, request, spot_id):
+        # Get the parking spot
+        try:
+            # First try to get by reference (UUID)
+            import uuid
+            try:
+                # Try to convert to UUID if it's in UUID format
+                uuid_obj = uuid.UUID(spot_id)
+                parking_spot = ParkingSpot.objects.get(reference=uuid_obj)
+            except (ValueError, TypeError):
+                # If not a valid UUID, try to get by name
+                parking_spot = ParkingSpot.objects.get(name=spot_id)
+        except ParkingSpot.DoesNotExist:
+            return Response({"error": "Parking spot not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Use the serializer to get the data
+        serializer = UserBookingHoursSerializer({
+            'parking_spot': parking_spot,
+        })
+
+        return Response(serializer.data)
+
+
 class ParkingSpotAvailableWindowsView(APIView):
     """
     Get booking windows for a specific parking spot.
@@ -455,16 +492,17 @@ class ParkingSpotAvailableWindowsView(APIView):
         # Create a list of hours for the selected date
         hourly_slots = []
 
-        # For today, start from current time + 1 hour
+        # For today, start from current time
         # For future dates, start from the beginning of the day
         if selected_date == timezone.now().date():
-            # Start from current time + 1 hour, rounded up to the next hour
-            current_hour = now + timedelta(hours=1)
-            # Round up to the next hour
-            if current_hour.minute > 0 or current_hour.second > 0:
-                current_hour = current_hour.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-            else:
+            # Start from current time, rounded to the nearest hour
+            current_hour = now
+            # If we're within the first 30 minutes of the hour, allow booking for the current hour
+            if current_hour.minute <= 30:
                 current_hour = current_hour.replace(minute=0, second=0, microsecond=0)
+            # Otherwise, round up to the next hour
+            else:
+                current_hour = current_hour.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
         else:
             # For future dates, start from the beginning of the day
             current_hour = start_time.replace(minute=0, second=0, microsecond=0)

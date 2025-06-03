@@ -8,6 +8,7 @@ from .views import (
     ReservationPaymentView,
     TimeSlotReservationsView,
     ParkingSpotAvailableWindowsView,
+    UserBookingHoursView,
 )
 
 urlpatterns = [
@@ -19,4 +20,5 @@ urlpatterns = [
     path('my-reservations/', UserReservationsView.as_view(), name='user-reservations'),
     path('time-slot-reservations/', TimeSlotReservationsView.as_view(), name='time-slot-reservations'),
     path('parking-spot/<str:spot_id>/available-windows/', ParkingSpotAvailableWindowsView.as_view(), name='parking-spot-available-windows'),
+    path('parking-spot/<str:spot_id>/user-booking-hours/', UserBookingHoursView.as_view(), name='parking-spot-user-booking-hours'),
 ]

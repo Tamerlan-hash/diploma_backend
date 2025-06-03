@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     'payments',
     'subscriptions',
     'notifications',
+    'contacts',
     'drf_yasg',
 ]
 

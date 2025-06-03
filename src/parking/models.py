@@ -122,12 +122,14 @@ class Reservation(models.Model):
                 raise ValueError("Cannot activate reservation: payment is not completed")
 
             self.status = 'active'
+            # Save the status change first to ensure it's updated even if blocker raising fails
+            self.save()
+
             # Raise the blocker when the reservation becomes active
             try:
                 self.parking_spot.blocker.raise_blocker()
             except Exception as e:
                 print(f"Error raising blocker: {e}")
-            self.save()
 
     def complete(self):
         if self.status == 'active':

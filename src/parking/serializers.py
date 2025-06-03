@@ -64,6 +64,9 @@ class ReservationSerializer(serializers.ModelSerializer):
                     if duration_seconds != 3600:  # 3600 seconds = 1 hour
                         raise serializers.ValidationError({"selected_hours": f"Slot {i} must be exactly 1 hour"})
 
+                    # Check if the slot is in the past
+                    if start < now:
+                        raise serializers.ValidationError({"selected_hours": f"Slot {i} is in the past"})
 
                     # Check for overlapping reservations
                     exclude_id = self.instance.id if self.instance else None
@@ -86,6 +89,19 @@ class ReservationSerializer(serializers.ModelSerializer):
 
                 except (ValueError, TypeError):
                     raise serializers.ValidationError({"selected_hours": f"Invalid datetime format for slot {i}"})
+
+            # Validate that selected hours are consecutive
+            if len(selected_hours) > 1:
+                # Sort slots by start time
+                sorted_slots = sorted(selected_hours, key=lambda x: timezone.datetime.fromisoformat(x['start']))
+
+                # Check if slots are consecutive
+                for i in range(len(sorted_slots) - 1):
+                    current_end = timezone.datetime.fromisoformat(sorted_slots[i]['end'])
+                    next_start = timezone.datetime.fromisoformat(sorted_slots[i+1]['start'])
+
+                    if current_end != next_start:
+                        raise serializers.ValidationError({"selected_hours": "Selected hours must be consecutive"})
 
             # Set overall start_time and end_time
             if start_times and end_times:
@@ -292,5 +308,78 @@ class TimeSlotReservationsSerializer(serializers.Serializer):
                 'sensor': sensor_status,
                 'blocker': blocker_status
             })
+
+        return result
+
+
+class UserBookingHoursSerializer(serializers.Serializer):
+    """
+    Serializer for displaying users and their booking hours for a specific parking spot.
+    This serializer provides information about how many hours each user has booked a particular parking spot.
+    """
+    parking_spot = serializers.SerializerMethodField()
+    user_bookings = serializers.SerializerMethodField()
+
+    def get_parking_spot(self, obj):
+        spot = obj['parking_spot']
+        return {
+            'id': spot.reference,
+            'name': spot.name,
+            'price_per_hour': str(spot.price_per_hour)
+        }
+
+    def get_user_bookings(self, obj):
+        # Get the parking spot from the object
+        spot = obj['parking_spot']
+
+        # Get all reservations for this parking spot
+        reservations = Reservation.objects.filter(
+            parking_spot=spot,
+            status__in=['pending', 'active', 'completed']
+        ).select_related('user')
+
+        # Group reservations by user
+        user_bookings = {}
+
+        for reservation in reservations:
+            username = reservation.user.username
+            user_id = reservation.user.id
+
+            # Calculate hours for this reservation
+            if reservation.selected_hours:
+                # If we have selected hours, calculate based on those
+                hours = len(reservation.selected_hours)
+            else:
+                # Otherwise calculate based on start and end time
+                duration = reservation.end_time - reservation.start_time
+                hours = duration.total_seconds() / 3600  # Convert seconds to hours
+
+            # Add or update user in the dictionary
+            if username not in user_bookings:
+                user_bookings[username] = {
+                    'user_id': user_id,
+                    'username': username,
+                    'total_hours': hours,
+                    'reservations': [{
+                        'id': reservation.id,
+                        'start_time': reservation.start_time,
+                        'end_time': reservation.end_time,
+                        'status': reservation.status,
+                        'hours': hours
+                    }]
+                }
+            else:
+                user_bookings[username]['total_hours'] += hours
+                user_bookings[username]['reservations'].append({
+                    'id': reservation.id,
+                    'start_time': reservation.start_time,
+                    'end_time': reservation.end_time,
+                    'status': reservation.status,
+                    'hours': hours
+                })
+
+        # Convert dictionary to list and sort by total hours (descending)
+        result = list(user_bookings.values())
+        result.sort(key=lambda x: x['total_hours'], reverse=True)
 
         return result

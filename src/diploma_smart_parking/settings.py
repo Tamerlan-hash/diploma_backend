@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     'subscriptions',
     'notifications',
     'contacts',
+    'ai',
     'drf_yasg',
 ]
 

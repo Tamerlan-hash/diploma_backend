@@ -520,14 +520,19 @@ class ParkingSpotAvailableWindowsView(APIView):
             status = "available"
             reason = None
 
-            # Check if this hourly slot overlaps with any reservation
-            for reservation in reservations:
-                # If reservation overlaps with this slot, mark as blocked
-                if (reservation.start_time < slot_end and 
-                    reservation.end_time > slot_start):
-                    status = "blocked"
-                    reason = "already_booked"
-                    break
+            # Check if this slot is in the past
+            if slot_start < now:
+                status = "blocked"
+                reason = "past_time"
+            else:
+                # Check if this hourly slot overlaps with any reservation
+                for reservation in reservations:
+                    # If reservation overlaps with this slot, mark as blocked
+                    if (reservation.start_time < slot_end and 
+                        reservation.end_time > slot_start):
+                        status = "blocked"
+                        reason = "already_booked"
+                        break
 
             hourly_windows.append({
                 'start_time': slot_start.isoformat(),
